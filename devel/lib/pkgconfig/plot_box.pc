@@ -1,0 +1,8 @@
+prefix=/home/dylan/catkin_ws/devel
+
+Name: plot_box
+Description: Description of plot_box
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/dylan/catkin_ws/devel/lib 
+Requires: 

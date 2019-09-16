@@ -1,0 +1,8 @@
+prefix=/home/dylan/catkin_ws/install
+
+Name: dylan_msc
+Description: Description of dylan_msc
+Version: 1.2.4
+Cflags: 
+Libs: -L/home/dylan/catkin_ws/install/lib 
+Requires: 
