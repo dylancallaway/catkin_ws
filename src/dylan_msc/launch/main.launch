@@ -17,12 +17,12 @@
 		<arg name="color_fps" value="15"/>
 
         <arg name="filters" value="pointcloud"/>
-        <!-- <arg name="pointcloud_texture_stream" value="RS2_STREAM_ANY"/> -->
+        <arg name="pointcloud_texture_stream" value="RS2_STREAM_ANY"/>
         <arg name="allow_no_texture_points" value="false"/>
     </include>
 
-    <node pkg="dylan_msc" type="imageProc1" name="imageProc1" output="screen">
-        <param name="pcd_path" type="string" value="$(find dylan_msc)/src/table_scene_lms400.pcd" />
-    </node>
+    <node pkg="dylan_msc" type="imageProc1" name="imageProc1" output="screen"/>
+
+    <node pkg="dylan_msc" type="plotter1.py" name="plotter1" output="screen"/>
 
 </launch>

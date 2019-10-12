@@ -1,10 +1,12 @@
 #include <ros/ros.h>
 #include <ros/console.h>
 #include <std_msgs/String.h>
+#include <std_msgs/Int64.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <visualization_msgs/Marker.h>
+#include <dylan_msc/obj.h>
 
 #include <pcl/ModelCoefficients.h>
 #include <pcl/point_types.h>
@@ -27,7 +29,8 @@ typedef pcl::PointCloud<pcl::PointXYZ> PCLCloud;
 
 PCLCloud::Ptr cloud(new PCLCloud), cloud_f(new PCLCloud), cloud_filtered(new PCLCloud);
 PCLCloud::Ptr cloud_msg(new PCLCloud);
-ros::Publisher pcl_pub, marker_pub;
+
+ros::Publisher pcl_pub, marker_pub, plotter_pub;
 
 void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
 {
@@ -42,45 +45,45 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
     // std::cout << "PointCloud after filtering has: " << cloud_filtered->points.size() << " data points." << std::endl; //*
     *cloud_filtered = *cloud;
 
-    // Create the segmentation object for the planar model and set all the parameters
-    pcl::SACSegmentation<pcl::PointXYZ> seg;
-    pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
-    pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_plane(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::PCDWriter writer;
-    seg.setOptimizeCoefficients(true);
-    seg.setModelType(pcl::SACMODEL_PLANE);
-    seg.setMethodType(pcl::SAC_RANSAC);
-    seg.setMaxIterations(100);
-    seg.setDistanceThreshold(0.02);
+    // // Create the segmentation object for the planar model and set all the parameters
+    // pcl::SACSegmentation<pcl::PointXYZ> seg;
+    // pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+    // pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+    // pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_plane(new pcl::PointCloud<pcl::PointXYZ>());
+    // pcl::PCDWriter writer;
+    // seg.setOptimizeCoefficients(true);
+    // seg.setModelType(pcl::SACMODEL_PLANE);
+    // seg.setMethodType(pcl::SAC_RANSAC);
+    // seg.setMaxIterations(100);
+    // seg.setDistanceThreshold(0.02);
 
-    int i = 0, nr_points = (int)cloud_filtered->points.size();
-    while (cloud_filtered->points.size() > 0.75 * nr_points)
-    {
-        // Segment the largest planar component from the remaining cloud
-        seg.setInputCloud(cloud_filtered);
-        seg.segment(*inliers, *coefficients);
-        if (inliers->indices.size() == 0)
-        {
-            std::cout << "Could not estimate a planar model for the given dataset." << std::endl;
-            break;
-        }
+    // int i = 0, nr_points = (int)cloud_filtered->points.size();
+    // while (cloud_filtered->points.size() > 0.5 * nr_points)
+    // {
+    //     // Segment the largest planar component from the remaining cloud
+    //     seg.setInputCloud(cloud_filtered);
+    //     seg.segment(*inliers, *coefficients);
+    //     if (inliers->indices.size() == 0)
+    //     {
+    //         std::cout << "Could not estimate a planar model for the given dataset." << std::endl;
+    //         break;
+    //     }
 
-        // Extract the planar inliers from the input cloud
-        pcl::ExtractIndices<pcl::PointXYZ> extract;
-        extract.setInputCloud(cloud_filtered);
-        extract.setIndices(inliers);
-        extract.setNegative(false);
+    //     // Extract the planar inliers from the input cloud
+    //     pcl::ExtractIndices<pcl::PointXYZ> extract;
+    //     extract.setInputCloud(cloud_filtered);
+    //     extract.setIndices(inliers);
+    //     extract.setNegative(false);
 
-        // Get the points associated with the planar surface
-        extract.filter(*cloud_plane);
-        // std::cout << "PointCloud representing the planar component: " << cloud_plane->points.size() << " data points." << std::endl;
+    //     // Get the points associated with the planar surface
+    //     extract.filter(*cloud_plane);
+    //     // std::cout << "PointCloud representing the planar component: " << cloud_plane->points.size() << " data points." << std::endl;
 
-        // Remove the planar inliers, extract the rest
-        extract.setNegative(true);
-        extract.filter(*cloud_f);
-        *cloud_filtered = *cloud_f;
-    }
+    //     // Remove the planar inliers, extract the rest
+    //     extract.setNegative(true);
+    //     extract.filter(*cloud_f);
+    //     *cloud_filtered = *cloud_f;
+    // }
 
     // Creating the KdTree object for the search method of the extraction
     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
@@ -121,27 +124,59 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
         // std::cout << "Centroid of cluster: " << cent_pt.x << "\n"
         //   << std::endl;
 
-        visualization_msgs::Marker cent_marker;
-        cent_marker.pose.position.x = cent_pt.x;
-        cent_marker.pose.position.y = cent_pt.y;
-        cent_marker.pose.position.z = cent_pt.z;
-        cent_marker.type = visualization_msgs::Marker::SPHERE;
-        cent_marker.header.stamp = ros::Time::now();
-        cent_marker.header.frame_id = msg->header.frame_id;
-        cent_marker.ns = "centroids";
-        cent_marker.id = ind;
+        // visualization_msgs::Marker cent_marker;
+        // cent_marker.pose.position.x = cent_pt.x;
+        // cent_marker.pose.position.y = cent_pt.y;
+        // cent_marker.pose.position.z = cent_pt.z;
+        // cent_marker.type = visualization_msgs::Marker::SPHERE;
+        // cent_marker.header.stamp = ros::Time::now();
+        // cent_marker.header.frame_id = msg->header.frame_id;
+        // cent_marker.ns = "centroids";
+        // cent_marker.id = ind;
+        // cent_marker.action = visualization_msgs::Marker::ADD;
+        // cent_marker.scale.x = .05;
+        // cent_marker.scale.y = .05;
+        // cent_marker.scale.z = .05;
+        // cent_marker.color.r = 0.0f;
+        // cent_marker.color.g = 1.0f;
+        // cent_marker.color.b = 0.0f;
+        // cent_marker.color.a = .75f;
+        // cent_marker.lifetime = ros::Duration(1.0);
+        // marker_pub.publish(cent_marker);
+
+        // make rectangular marker as large as bounding box and put on centroid
+
+        // publish xyz, size, index data to new topic and plot with Python
+
+        dylan_msc::obj plot_obj;
+
+        plot_obj.index = ind;
+
+        plot_obj.centroid.x = cent_pt.x;
+        plot_obj.centroid.y = cent_pt.y;
+        plot_obj.centroid.z = cent_pt.z;
+
+        plot_obj.min.x = min_pt.x;
+        plot_obj.min.y = min_pt.y;
+        plot_obj.min.z = min_pt.z;
+
+        plot_obj.max.x = max_pt.x;
+        plot_obj.max.y = max_pt.y;
+        plot_obj.max.z = max_pt.z;
+
+        // std_msgs::Int64 test;
+        // test.data = 25;
+        plotter_pub.publish(plot_obj);
+
+        // test/setup camera in lab room or room above floor
+
+        // get everything working on turtelbot
+
+        // pose stuff
+
+        // bayesian filter
+
         ind++;
-        cent_marker.action = visualization_msgs::Marker::ADD;
-        cent_marker.scale.x = .1;
-        cent_marker.scale.y = .1;
-        cent_marker.scale.z = .1;
-        cent_marker.color.r = 0.0f;
-        cent_marker.color.g = 1.0f;
-        cent_marker.color.b = 0.0f;
-        cent_marker.color.a = 1.0;
-        // ros::Duration quick_decay(1.0);
-        cent_marker.lifetime = ros::Duration(1.0);
-        marker_pub.publish(cent_marker);
     }
 
     ind = 0;
@@ -155,10 +190,13 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "imageProc1");
     ros::NodeHandle node;
-    ros::Subscriber sub = node.subscribe("/camera/depth/color/points", 1, frame_cb);
 
-    pcl_pub = node.advertise<PCLCloud>("points2", 10);
-    marker_pub = node.advertise<visualization_msgs::Marker>("mark2", 10);
+    pcl_pub = node.advertise<PCLCloud>("/points2", 10);
+    // marker_pub = node.advertise<visualization_msgs::Marker>("/mark2", 10);
+    plotter_pub = node.advertise<dylan_msc::obj>("/plot2", 10);
+    // plotter_pub = node.advertise<std_msgs::Int64>("/plot2", 10);
+
+    ros::Subscriber sub = node.subscribe("/camera/depth/color/points", 5, frame_cb);
 
     ros::spin();
 

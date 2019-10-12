@@ -1,16 +1,38 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(dylan_msc)
-catkin_package()
+
+find_package(catkin REQUIRED COMPONENTS 
+    roscpp 
+    rospy 
+    std_msgs
+    geometry_msgs
+    message_generation
+    PCL
+)
+
+add_message_files(
+    FILES
+    obj.msg
+)
+
+generate_messages(
+    DEPENDENCIES
+    std_msgs
+    geometry_msgs
+)
+
+catkin_package(
+    LIBRARIES ${PROJECT_NAME}
+    CATKIN_DEPENDS roscpp rospy std_msgs geometry_msgs message_runtime
+)
+
+include_directories(
+    include
+    ${catkin_INCLUDE_DIRS}
+    ${PCL_INCLUDE_DIRS}
+)
+
 
 add_executable(imageProc1 src/imageProc1.cpp)
-
-find_package(PCL 1.2 REQUIRED)
-include_directories(${PCL_INCLUDE_DIRS})
-link_directories(${PCL_LIBRARY_DIRS})
-add_definitions(${PCL_DEFINITIONS})
-target_link_libraries (imageProc1 ${PCL_LIBRARIES})
-
-find_package(catkin REQUIRED roscpp std_msgs)
-include_directories(include ${catkin_INCLUDE_DIRS})
-target_link_libraries(imageProc1 ${catkin_LIBRARIES})
-
+target_link_libraries (imageProc1 ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+add_dependencies(imageProc1 dylan_msc_generate_messages_cpp ${${PROJECT_NAME}_EXPORTED_TARGETS}  ${catkin_EXPORTED_TARGETS})

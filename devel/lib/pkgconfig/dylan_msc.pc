@@ -3,6 +3,6 @@ prefix=/home/dylan/catkin_ws/devel
 Name: dylan_msc
 Description: Description of dylan_msc
 Version: 1.2.4
-Cflags: 
-Libs: -L/home/dylan/catkin_ws/devel/lib 
-Requires: 
+Cflags: -I/home/dylan/catkin_ws/devel/include
+Libs: -L/home/dylan/catkin_ws/devel/lib -ldylan_msc
+Requires: roscpp rospy std_msgs geometry_msgs message_runtime
