@@ -67,7 +67,7 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
     seg.setDistanceThreshold(0.01);
 
     int i = 0, nr_points = (int)cloud_filtered->points.size();
-    while (cloud_filtered->points.size() > 0.75 * nr_points)
+    while (cloud_filtered->points.size() > 0.6 * nr_points)
     {
         // Segment the largest planar component from the remaining cloud
         seg.setInputCloud(cloud_filtered);

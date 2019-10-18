@@ -112,9 +112,10 @@ class Plotter():
         self.graph._offsets3d = (
             self.final_cent_x, self.final_cent_y, self.final_cent_z)
 
+        ani_final_verts = self.final_verts
         for i in range(0, len(self.final_verts)):
             self.bb.append(Poly3DCollection(
-                self.final_verts[i], facecolors='cyan', linewidths=1, edgecolors='r', alpha=.25))
+                ani_final_verts[i], facecolors='cyan', linewidths=1, edgecolors='r', alpha=.25))
             self.ax.add_collection3d(self.bb[i])
 
         return self.graph
