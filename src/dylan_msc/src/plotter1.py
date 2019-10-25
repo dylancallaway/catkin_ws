@@ -120,6 +120,8 @@ class Plotter():
 
         return self.graph
 
+# TODO plot straight path of where the robot might go
+
 
 if __name__ == '__main__':
     plotter1 = Plotter()

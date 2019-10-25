@@ -12,7 +12,13 @@
         "system_error": "cpp",
         "array": "cpp",
         "ostream": "cpp",
-        "bitset": "cpp"
+        "bitset": "cpp",
+        "unordered_map": "cpp",
+        "unordered_set": "cpp",
+        "hash_map": "cpp",
+        "hash_set": "cpp",
+        "initializer_list": "cpp",
+        "valarray": "cpp"
     },
     "python.pythonPath": "/usr/bin/python"
 }

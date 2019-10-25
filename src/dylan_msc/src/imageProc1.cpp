@@ -33,45 +33,46 @@ PCLCloud::Ptr cloud_msg(new PCLCloud);
 
 ros::Publisher pcl_pub, marker_pub, plotter_pub;
 
+// Function called for each frame received
 void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
 {
     pcl::fromROSMsg(*msg, *cloud); // Convert PointCloud2 ROS msg to PCL PointCloud
     // std::cout << "PointCloud before filtering has: " << cloud->points.size() << " data points." << std::endl;
 
-    // Filter out points beyond a certain distance
-    pcl::PassThrough<pcl::PointXYZ> pass;
-    pass.setInputCloud(cloud);
-    pass.setFilterFieldName("z");
-    pass.setFilterLimits(0.0, .1);
-    //pass.setFilterLimitsNegative (true);
+    // Passthrough filter
+    // Removes points outside of a certain range
+    pcl::PassThrough<pcl::PointXYZ> pass; // create filter object
+    pass.setInputCloud(cloud);            // set incoming cloud as input to filter
+    pass.setFilterFieldName("z");         // filter on z axis (depth)
+    pass.setFilterLimits(0.0, 2.0);
+    pass.filter(*cloud_filtered); // returns cloud_filtered, the cloud with points outside of limits removed
+    // Repeat for y axis (height)
+    pass.setInputCloud(cloud_filtered);
+    pass.setFilterFieldName("y");
+    pass.setFilterLimits(-2.0, 0.2);
     pass.filter(*cloud_filtered);
+    // std::cout << "PointCloud after distance filtering has: " << cloud_filtered->points.size() << " data points." << std::endl;
 
-    // Create the filtering object: downsample the dataset using a leaf size of 1cm
-    // pcl::VoxelGrid<pcl::PointXYZ> vg;
-    // vg.setInputCloud(cloud);
-    // vg.setLeafSize(0.01f, 0.01f, 0.01f);
-    // vg.filter(*cloud_filtered);
-    // std::cout << "PointCloud after filtering has: " << cloud_filtered->points.size() << " data points." << std::endl; //*
-    *cloud_filtered = *cloud;
-
+    // Estimate planar model of floor and remove it
     // Create the segmentation object for the planar model and set all the parameters
     pcl::SACSegmentation<pcl::PointXYZ> seg;
-    pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices); // planar inliers
     pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_plane(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::PCDWriter writer;
     seg.setOptimizeCoefficients(true);
     seg.setModelType(pcl::SACMODEL_PLANE);
     seg.setMethodType(pcl::SAC_RANSAC);
     seg.setMaxIterations(100);
-    seg.setDistanceThreshold(0.01);
+    seg.setDistanceThreshold(0.01); // maximum euclidean distance between points considered to be planar
 
-    int i = 0, nr_points = (int)cloud_filtered->points.size();
-    while (cloud_filtered->points.size() > 0.6 * nr_points)
+    int i = 0, nr_points = (int)cloud_filtered->points.size(); // get size of cloud_filtered in number of points
+    // Filter out largest planar model until cloud_filtered is reduced to XX% (see code) of original cloud_filtered
+    while (cloud_filtered->points.size() > 0.5 * nr_points)
     {
         // Segment the largest planar component from the remaining cloud
         seg.setInputCloud(cloud_filtered);
         seg.segment(*inliers, *coefficients);
+        // If no planar inliers exist
         if (inliers->indices.size() == 0)
         {
             std::cout << "Could not estimate a planar model for the given dataset." << std::endl;
@@ -93,6 +94,7 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
         extract.filter(*cloud_f);
         *cloud_filtered = *cloud_f;
     }
+    // std::cout << "PointCloud after plane filtering has: " << cloud_filtered->points.size() << " data points." << std::endl;
 
     // Creating the KdTree object for the search method of the extraction
     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
@@ -101,8 +103,8 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
     std::vector<pcl::PointIndices> cluster_indices;
     pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
     ec.setClusterTolerance(0.02);
-    ec.setMinClusterSize(1000);
-    ec.setMaxClusterSize(100000);
+    ec.setMinClusterSize(150);
+    ec.setMaxClusterSize(25000);
     ec.setSearchMethod(tree);
     ec.setInputCloud(cloud_filtered);
     ec.extract(cluster_indices);
@@ -129,29 +131,29 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
 
         *cluster_sum += *cloud_cluster;
 
-        std::cout << "PointCloud representing the Cluster: " << cloud_cluster->points.size() << " data points." << std::endl;
-        // std::cout << "Centroid of cluster: " << cent_pt.x << "\n"
+        // std::cout << "PointCloud representing the Cluster: " << cloud_cluster->points.size() << " data points." << std::endl;
+        // std::cout << "Centroid of cluster: " << cent_pt << "\n"
         //   << std::endl;
 
-        // visualization_msgs::Marker cent_marker;
-        // cent_marker.pose.position.x = cent_pt.x;
-        // cent_marker.pose.position.y = cent_pt.y;
-        // cent_marker.pose.position.z = cent_pt.z;
-        // cent_marker.type = visualization_msgs::Marker::SPHERE;
-        // cent_marker.header.stamp = ros::Time::now();
-        // cent_marker.header.frame_id = msg->header.frame_id;
-        // cent_marker.ns = "centroids";
-        // cent_marker.id = ind;
-        // cent_marker.action = visualization_msgs::Marker::ADD;
-        // cent_marker.scale.x = .05;
-        // cent_marker.scale.y = .05;
-        // cent_marker.scale.z = .05;
-        // cent_marker.color.r = 0.0f;
-        // cent_marker.color.g = 1.0f;
-        // cent_marker.color.b = 0.0f;
-        // cent_marker.color.a = .75f;
-        // cent_marker.lifetime = ros::Duration(1.0);
-        // marker_pub.publish(cent_marker);
+        visualization_msgs::Marker cent_marker;
+        cent_marker.pose.position.x = cent_pt.x;
+        cent_marker.pose.position.y = cent_pt.y;
+        cent_marker.pose.position.z = cent_pt.z;
+        cent_marker.type = visualization_msgs::Marker::SPHERE;
+        cent_marker.header.stamp = ros::Time::now();
+        cent_marker.header.frame_id = msg->header.frame_id;
+        cent_marker.ns = "centroids";
+        cent_marker.id = ind;
+        cent_marker.action = visualization_msgs::Marker::ADD;
+        cent_marker.scale.x = .05;
+        cent_marker.scale.y = .05;
+        cent_marker.scale.z = .05;
+        cent_marker.color.r = 0.0f;
+        cent_marker.color.g = 1.0f;
+        cent_marker.color.b = 0.0f;
+        cent_marker.color.a = .75f;
+        cent_marker.lifetime = ros::Duration(1.0);
+        marker_pub.publish(cent_marker);
 
         // make rectangular marker as large as bounding box and put on centroid
 
@@ -179,6 +181,8 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
 
         // test/setup camera in lab room or room above floor
 
+        // fix near vision issues
+
         // get everything working on turtelbot
 
         // pose stuff
@@ -201,7 +205,7 @@ int main(int argc, char **argv)
     ros::NodeHandle node;
 
     pcl_pub = node.advertise<PCLCloud>("/points2", 10);
-    // marker_pub = node.advertise<visualization_msgs::Marker>("/mark2", 10);
+    marker_pub = node.advertise<visualization_msgs::Marker>("/mark2", 10);
     plotter_pub = node.advertise<dylan_msc::obj>("/plot2", 10);
     // plotter_pub = node.advertise<std_msgs::Int64>("/plot2", 10);
 
