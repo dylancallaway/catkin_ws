@@ -62,16 +62,45 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
     seg.setOptimizeCoefficients(true);
     seg.setModelType(pcl::SACMODEL_PLANE);
     seg.setMethodType(pcl::SAC_RANSAC);
-    seg.setMaxIterations(100);
-    seg.setDistanceThreshold(0.01); // maximum euclidean distance between points considered to be planar
+    seg.setMaxIterations(50);
+    seg.setDistanceThreshold(0.02); // maximum euclidean distance between points considered to be planar
 
     int i = 0, nr_points = (int)cloud_filtered->points.size(); // get size of cloud_filtered in number of points
     // Filter out largest planar model until cloud_filtered is reduced to XX% (see code) of original cloud_filtered
-    while (cloud_filtered->points.size() > 0.5 * nr_points)
+    // Segment the largest planar component from the remaining cloud
+    seg.setInputCloud(cloud_filtered);
+    seg.segment(*inliers, *coefficients);
+    bool check_val = 1;
+    while (check_val && cloud_filtered->points.size() > 0.5 * nr_points)
+    // while (cloud_filtered->points.size() > 0.5 * nr_points)
     {
         // Segment the largest planar component from the remaining cloud
         seg.setInputCloud(cloud_filtered);
         seg.segment(*inliers, *coefficients);
+
+        static float delta_check = 0.2f;
+        check_val = check_val && (coefficients->values[0] > -delta_check && coefficients->values[0] < delta_check);
+        check_val = check_val && (coefficients->values[1] > -1.0f - delta_check && coefficients->values[1] < -1.0f + delta_check);
+        check_val = check_val && (coefficients->values[2] > -delta_check && coefficients->values[2] < delta_check);
+        // check_val = check_val && (coefficients->values[3] >= -0.2 && coefficients->values[3] <= 0.2);
+        // A  = 0
+        // B = -1
+        // C = 0
+        // D can be anything
+        // eqn of x-z plane is B = D
+        if (!check_val)
+        {
+            continue;
+        }
+
+        // // info about removed planes
+        // std::cout << "Coeffs: " << coefficients->values[0] << " "
+        //           << coefficients->values[1] << " "
+        //           << coefficients->values[2] << " "
+        //           << coefficients->values[3] << " "
+        //           << inliers->indices.size() << "\n"
+        //           << std::endl;
+
         // If no planar inliers exist
         if (inliers->indices.size() == 0)
         {
@@ -103,8 +132,8 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
     std::vector<pcl::PointIndices> cluster_indices;
     pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
     ec.setClusterTolerance(0.02);
-    ec.setMinClusterSize(150);
-    ec.setMaxClusterSize(25000);
+    ec.setMinClusterSize(300);
+    ec.setMaxClusterSize(30000);
     ec.setSearchMethod(tree);
     ec.setInputCloud(cloud_filtered);
     ec.extract(cluster_indices);
@@ -145,13 +174,13 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
         cent_marker.ns = "centroids";
         cent_marker.id = ind;
         cent_marker.action = visualization_msgs::Marker::ADD;
-        cent_marker.scale.x = .05;
-        cent_marker.scale.y = .05;
-        cent_marker.scale.z = .05;
+        cent_marker.scale.x = 0.05;
+        cent_marker.scale.y = 0.05;
+        cent_marker.scale.z = 0.05;
         cent_marker.color.r = 0.0f;
         cent_marker.color.g = 1.0f;
         cent_marker.color.b = 0.0f;
-        cent_marker.color.a = .75f;
+        cent_marker.color.a = 0.75f;
         cent_marker.lifetime = ros::Duration(1.0);
         marker_pub.publish(cent_marker);
 
