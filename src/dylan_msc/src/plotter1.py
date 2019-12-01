@@ -20,7 +20,7 @@ class Plotter():
         axes_size = 2
         self.ax.set_xlim(-axes_size, axes_size)
         self.ax.set_ylim(0, axes_size)
-        self.ax.set_zlim(-0.2, axes_size)
+        self.ax.set_zlim(-0.15, axes_size)
         self.ax.set_xlabel('X')
         self.ax.set_ylabel('Y')
         self.ax.set_zlabel('Z')
@@ -50,10 +50,10 @@ class Plotter():
 
         self.bb = []
 
-        self.road_0 = [-0.75, 0, -0.2]
-        self.road_1 = [0.75, 0, -0.2]
-        self.road_2 = [-0.75, 2, -0.2]
-        self.road_3 = [0.75, 2, -0.2]
+        self.road_0 = [-0.5, 0, -0.15]
+        self.road_1 = [0.5, 0, -0.15]
+        self.road_2 = [-1.0, 2, -0.15]
+        self.road_3 = [1.0, 2, -0.15]
         self.road_points = (
             [[self.road_1, self.road_3, self.road_2, self.road_0]])
         self.road_plot = Poly3DCollection(
@@ -116,25 +116,31 @@ class Plotter():
                                [p5, p8, p4, p1]])
 
     def animation_cb(self, unused_iterator):
+        cent_x = self.final_cent_x
+        cent_y = self.final_cent_y
+        cent_z = self.final_cent_z
+        verts = self.final_verts
+
         for i in range(0, len(self.bb)):
             self.bb[i].remove()
 
         self.bb = []
 
-        self.graph._offsets3d = (
-            self.final_cent_x, self.final_cent_y, self.final_cent_z)
+        self.graph._offsets3d = (cent_x, cent_y, cent_z)
 
-        for i in range(0, len(self.final_verts)):
+        for i in range(0, len(verts)):
             self.bb.append(Poly3DCollection(
-                self.final_verts[i], facecolors='cyan', linewidths=1, edgecolors='r', alpha=0.25))
+                verts[i], facecolors='red', linewidths=2, edgecolors='r', alpha=0.25))
             self.ax.add_collection3d(self.bb[i])
 
         return self.graph
+
+# TODO make it robust against removing objects while it tries to plot
 
 
 if __name__ == '__main__':
     plotter1 = Plotter()
     ani = animation.FuncAnimation(
-        plotter1.fig, plotter1.animation_cb, interval=200, blit=False)
+        plotter1.fig, plotter1.animation_cb, interval=100, blit=False)
     plt.show(block=True)
     # rospy.spin() not need because of plt.show()
