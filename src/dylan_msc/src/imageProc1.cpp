@@ -295,101 +295,186 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
     {
         std::cout << "\nFrame: " << frame_index << "\n";
 
-        // this finds the order of the measurement vector z by smallest euclidean distance to x_m
-        // std::vector<int> i_m;        // vector of indices of matched zs to x_ms
-        // i_m.assign(x_ms.size(), -1); // match array is same size as number of estimates (x_ms)
-
-        // std::vector<float> min_dist;
         zs_orig = zs;                                     // store raw measurements
         Eigen::MatrixXf dists(num_clusters, x_ms.size()); // euc distance matrix (rows are measurements, cols are estimates)
         for (int j = 0; j < x_ms.size(); j++)             // for jth x_m (estimate)
         {
-            // min_dist.assign(x_ms.size(), 1000.0f);
             for (int i = 0; i < num_clusters; i++) // for ith z (measurement)
             {
                 float dist = (zs_orig[i] - x_ms[j]).norm(); // add H back here
                 dists(i, j) = dist;                         // euc distance between zs[i] and x_ms[j]
-
-                // if (dist < min_dist[j])
-                // {
-                //     min_dist[j] = dist;
-                //     // zs[j] = zs_orig[i]; // assign original z[i] with smallest distance to x_m[j] to z[j]
-                //     i_m[j] = i; // record index of matched z[i] in to i_m[j]
-                //     std::cout << dist << "\n"
-                //               << i << "\n"
-                //               << j << "\n";
-                // }
             }
         }
 
-        // find columnwise minimum of dists matrix
-        Eigen::MatrixXf min_dists(1, x_ms.size());           // vec of minimum distance to nearest meas for each est
-        Eigen::Matrix<int, -1, -1> min_inds(2, x_ms.size()); // mat of indices of nearest meas for each est
-        int i_min, j_min;
-        for (int j = 0; j < x_ms.size(); j++) // for each est
-        {
-            min_dists(j) = dists.col(j).minCoeff(&i_min, &j_min); // find min dist
-            min_inds(0, j) = i_min;                               // min dist ind i
-            min_inds(1, j) = j;                                   // min dist ind j
-        }
+        //-----------------------------------------------------------
 
-        Eigen::Matrix<int, -1, -1> dup_inds(2, x_ms.size()); // indices of duplicate matches (ie. multiple estimates match to the same measurement)
-        // happens when removing an object from FOV
-
-        dup_inds.setConstant(-1);
-        for (int j = 0; j < x_ms.size(); j++) // for each est
+        // check if meas has multiple est matches
+        // happens if meas is removed (obj is removed)
+        // x_ms.size() = num_clusters + num_objs_removed
+        if (num_clusters < x_ms.size())
         {
-            for (int jj = j + 1; jj < x_ms.size(); jj++) // for each est except for previous est
+            // find columnwise minimum of dists matrix
+            Eigen::MatrixXf min_dists(1, x_ms.size());           // vec of minimum distance to nearest meas for each est
+            Eigen::Matrix<int, -1, -1> min_inds(2, x_ms.size()); // mat of indices of nearest meas for each est
+            int i_min, j_min;
+            for (int j = 0; j < x_ms.size(); j++) // for each est
             {
-                if (min_inds(0, j) == min_inds(0, jj)) // if est has the same min inds (if it matches more than one meas)
+                min_dists(j) = dists.col(j).minCoeff(&i_min, &j_min); // find min dist
+                min_inds(0, j) = i_min;                               // min dist ind i
+                min_inds(1, j) = j;                                   // min dist ind j
+            }
+
+            std::cout << "Dists:\n"
+                      << dists << "\n\n"
+                      << "Min Dists: " << min_dists << "\n\n"
+                      << "Min Inds:\n"
+                      << min_inds << "\n\n";
+
+            Eigen::Matrix<int, -1, -1> meas_dup(x_ms.size(), x_ms.size());
+            Eigen::MatrixXf dup_dists(x_ms.size(), x_ms.size());
+            meas_dup.setConstant(-1);
+            dup_dists.setConstant(100.0f);
+            for (int j = 0; j < x_ms.size(); j++) // for each est
+            {
+                // get indices of each duplicate j
+                for (int jj = j + 1; jj < x_ms.size(); jj++) // for each est except for previous est
                 {
-                    dup_inds(0, j) = min_inds(0, j); // set dup_inds to meas inds for that match
-                    dup_inds(0, jj) = min_inds(0, jj);
-                    dup_inds(1, j) = j; // set dup_inds to est inds for that match
-                    dup_inds(1, jj) = jj;
-                }
-            }
-        }
-
-        x_ms_orig = x_ms;                               // store original x_ms
-        Eigen::MatrixXf dup_dists(1, x_ms_orig.size()); // distances of duped matches
-        int i_max = -1, j_max = -1;
-        for (int j = 0; j < x_ms.size(); j++) // for each est
-        {
-            dup_dists.setConstant(-1.0f);
-            if (dup_inds(0, j) == -1 && dup_inds(1, j) == -1) // if that est was not duped
-            {
-                continue;
-            }
-            else // if it was a duped est (primarily)
-            {
-                for (int jj = j + 1; jj < x_ms_orig.size(); jj++) // for each est other than previous est
-                {
-                    if (dup_inds(0, jj) == dup_inds(0, j)) // find the other match dupes of the same meas
+                    if (min_inds(0, j) == min_inds(0, jj)) // if current meas index matches another meas index (one meas matches to mult ests)
                     {
-                        dup_dists(j) = min_dists(j); // set dup_dists to min dist on those matches
-                        dup_dists(jj) = min_dists(jj);
+                        // j and jj are the measurement indices that have duplicates
+                        // are also the indices of the estimates that the duplicate measurements got matched to
+                        meas_dup(j, j) = j;
+                        meas_dup(j, jj) = jj;
+                        dup_dists(j, j) = dists(j, j);
+                        dup_dists(j, jj) = dists(j, jj);
                     }
                 }
-                // bool no_dup = 1; // var for checking if the meas was in fact duped
-                // for (int i = 0; i < dup_dists.size(); i++)
-                // {
-                // no_dup = no_dup && dup_dists(i) == -1.0f;
-                // }
-                // if (no_dup == false)
-                // {
-                float max_dup_dist = dup_dists.maxCoeff(&i_max, &j_max); // just getting j_max (est with largest euc distance)
-                x_ms.erase(x_ms.begin() + j_max);                        // pop the largest distance est
-                std::cout << dup_dists << "\n"
-                          << j_max << "\n";
-                // }
+            }
+
+            std::cout << "Meas Dup:\n"
+                      << meas_dup << "\n\n"
+                      << "Dup Dists:\n"
+                      << dup_dists << "\n\n";
+
+            Eigen::Matrix<int, -1, -1> min_dup_ind(x_ms.size(), 1);
+            min_dup_ind.setConstant(-1);
+            for (int j = 0; j < x_ms.size(); j++) // for each est
+            {
+                // this checks if the whole meas_dup row is -1 (no dups found)
+                bool no_dup_check = 1;
+                for (int jj = 0; jj < x_ms.size(); jj++) // for each est
+                {
+                    no_dup_check = no_dup_check && meas_dup(j, jj) == -1;
+                }
+                if (no_dup_check == 0) // if a row with dups is found
+                {
+                    int i_min, j_min;
+                    float min_dup_dist = dup_dists.row(j).minCoeff(&i_min, &j_min); // row wise minimum of rows with dups
+                    min_dup_ind(j) = j_min;                                         // this is the est index to keep of all the dups of z(j)
+                }
+            }
+
+            std::cout << "Min Dup Ind:\n"
+                      << min_dup_ind << "\n\n";
+
+            x_ms.clear();
+            for (int j = 0; j < x_ms.size(); j++) // for each est
+            {
+                for (int jj = 0; jj < x_ms.size(); jj++) // for each est
+                {
+                    if (meas_dup(j, jj) == min_dup_ind(j) && meas_dup(j, jj) != -1)
+                    {
+                        x_ms.push_back(x_ms_orig[j]);
+                    }
+                }
             }
         }
+        // --------------------------------------------------------------
+        else if (num_clusters > x_ms.size())
+        {
+            // check if est has multiple meas matches
+            // happens if meas is added (obj is added)
+            // num_clusters = x_ms.size() + num_objs_added
 
-        std::cout << dists << "\n\n"
-                  << min_dists << "\n"
-                  << min_inds << "\n\n"
-                  << dup_inds << "\n\n";
+            // find rowwise minimum of dists matrix
+            Eigen::MatrixXf min_dists(num_clusters, 1);           // vec of minimum distance to nearest meas for each est
+            Eigen::Matrix<int, -1, -1> min_inds(2, num_clusters); // mat of indices of nearest meas for each est
+            int i_min, j_min;
+            for (int i = 0; i < num_clusters; i++) // for each est
+            {
+                min_dists(i) = dists.row(i).minCoeff(&i_min, &j_min); // find min dist
+                min_inds(0, i) = i;                                   // min dist ind i
+                min_inds(1, i) = j_min;                               // min dist ind j
+            }
+
+            std::cout << "Dists:\n"
+                      << dists << "\n\n"
+                      << "Min Dists:\n"
+                      << min_dists << "\n\n"
+                      << "Min Inds:\n"
+                      << min_inds << "\n\n";
+        }
+
+        // // this is all if num_clusters < x_m
+        // // ie happens when removing an object from FOV
+        // Eigen::Matrix<int, -1, -1> dup_inds(2, x_ms.size()); // indices of duplicate matches (ie. multiple estimates match to the same measurement)
+        // dup_inds.setConstant(-1);
+        // for (int j = 0; j < x_ms.size(); j++) // for each est
+        // {
+        //     for (int jj = j + 1; jj < x_ms.size(); jj++) // for each est except for previous est
+        //     {
+        //         if (min_inds(0, j) == min_inds(0, jj)) // if est has the same min inds (if it matches more than one meas)
+        //         {
+        //             dup_inds(0, j) = min_inds(0, j); // set dup_inds to meas inds for that match
+        //             dup_inds(0, jj) = min_inds(0, jj);
+        //             dup_inds(1, j) = j; // set dup_inds to est inds for that match
+        //             dup_inds(1, jj) = jj;
+        //         }
+        //     }
+        // }
+
+        // x_ms_orig = x_ms;                               // store original x_ms
+        // Eigen::MatrixXf dup_dists(1, x_ms_orig.size()); // distances of duped matches
+        // int j_min = 100.0f, j_max = 100.0f;
+        // int i_max = -1, j_max = -1;
+        // for (int j = 0; j < x_ms.size(); j++) // for each est
+        // {
+        //     dup_dists.setConstant(-1.0f);
+        //     if (dup_inds(0, j) == -1 && dup_inds(1, j) == -1) // if that est was not duped
+        //     {
+        //         continue;
+        //     }
+        //     else // if it was a duped est (primarily)
+        //     {
+        //         for (int jj = j + 1; jj < x_ms_orig.size(); jj++) // for each est other than previous est
+        //         {
+        //             if (dup_inds(0, jj) == dup_inds(0, j)) // find the other match dupes of the same meas
+        //             {
+        //                 dup_dists(j) = min_dists(j); // set dup_dists to min dist on those matches
+        //                 dup_dists(jj) = min_dists(jj);
+        //             }
+        //         }
+        //         // bool no_dup = 1; // var for checking if the meas was in fact duped
+        //         // for (int i = 0; i < dup_dists.size(); i++)
+        //         // {
+        //         // no_dup = no_dup && dup_dists(i) == -1.0f;
+        //         // }
+        //         // if (no_dup == false)
+        //         // {
+        //         float min_dup_dist = dup_dists.minCoeff(&i_min, &j_min); // just getting j_min (est with smallest euc distance)
+        //         float max_dup_dist = dup_dists.maxCoeff(&i_max, &j_max); // just getting j_max (est with largest euc distance)
+        //         for (int j = 0; j < x_ms.size(); j++)                    // for each est
+        //         {
+
+        //         }
+        //         x_ms.erase(x_ms.begin() + j_max); // pop the largest distance est
+        //         std::cout << dup_dists << "\n"
+        //                   << j_max << "\n";
+        //         // }
+        //     }
+        // }
+
+        //           << dup_inds << "\n\n";
 
         // if (num_clusters < x_ms.size()) // if we lose a cluster same as if (j[any] == j[any])
         // {
@@ -512,6 +597,7 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
     output.header = msg->header;
     pcl_pub.publish(output);
     frame_index += 1;
+    std::cout << "\n";
 }
 
 int main(int argc, char **argv)
