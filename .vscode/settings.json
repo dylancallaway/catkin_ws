@@ -63,7 +63,8 @@
         "typeindex": "cpp",
         "typeinfo": "cpp",
         "core": "cpp",
-        "numericaldiff": "cpp"
+        "numericaldiff": "cpp",
+        "*.ipp": "cpp"
     },
     "python.pythonPath": "/usr/bin/python"
 }

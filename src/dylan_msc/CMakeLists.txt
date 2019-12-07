@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(dylan_msc)
 
+add_compile_options(-std=c++11)
+
 find_package(catkin REQUIRED COMPONENTS 
     roscpp 
     rospy 
@@ -36,3 +38,4 @@ include_directories(
 add_executable(imageProc1 src/imageProc1.cpp)
 target_link_libraries (imageProc1 ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 add_dependencies(imageProc1 dylan_msc_generate_messages_cpp ${${PROJECT_NAME}_EXPORTED_TARGETS}  ${catkin_EXPORTED_TARGETS})
+

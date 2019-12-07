@@ -21,8 +21,8 @@
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl_conversions/pcl_conversions.h> // Required for pcl::fromROSMsg
-#include <pcl/visualization/cloud_viewer.h>
-#include <pcl/visualization/pcl_visualizer.h>
+// #include <pcl/visualization/cloud_viewer.h>
+// #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl/filters/passthrough.h>
 
@@ -43,14 +43,15 @@ float t0 = 0.0f;
 uint64_t frame_index = 0;
 
 Eigen::MatrixXf A(6, 6), Q(6, 6), u(6, 1), H(3, 6), R(3, 3);
-Eigen::MatrixXf x_p(6, 1), x_m(6, 1), z(3, 1);
+Eigen::MatrixXf x_p(6, 1), x_m(3, 1), z(3, 1);
 Eigen::MatrixXf P_p(6, 6), P_m(6, 6);
 
-std::vector<Eigen::MatrixXf> x_ps, x_ms, x_ms_last, zs, P_ps, P_ms;
+std::vector<Eigen::MatrixXf> x_ps, x_ms, x_ms_last, zs, P_ps, P_ms, zs_orig, x_ms_orig;
 
 // Function called for each frame received
 void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
 {
+
     pcl::fromROSMsg(*msg, *cloud); // Convert PointCloud2 ROS msg to PCL PointCloud
     // std::cout << "PointCloud before filtering has: " << cloud->points.size() << " data points." << std::endl;
 
@@ -59,7 +60,7 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
     pcl::PassThrough<pcl::PointXYZ> pass; // create filter object
     pass.setInputCloud(cloud);            // set incoming cloud as input to filter
     pass.setFilterFieldName("z");         // filter on z axis (depth)
-    pass.setFilterLimits(0.0f, 2.0f);
+    pass.setFilterLimits(0.0f, 1.0f);
     pass.filter(*cloud_filtered); // returns cloud_filtered, the cloud with points outside of limits removed
     // Repeat for y axis (height)
     pass.setInputCloud(cloud_filtered);
@@ -162,13 +163,14 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
 
     PCLCloud::Ptr cluster_sum(new PCLCloud);
     pcl::PointXYZ min_pt, max_pt, cent_pt;
-    // uint8_t ci = 0;
-    int ci = 0; // cluster index
-    static int ci_max = 0;
     float t1 = float(std::clock()) / float(CLOCKS_PER_SEC);
     float dt = t1 - t0;
+    int num_clusters = 0;
+    static int last_num_clusters = 0;
     // std::cout << dt << "\n"
     //   << std::endl;
+
+    zs.clear();
     for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
     {
         PCLCloud::Ptr cloud_cluster(new PCLCloud);
@@ -187,100 +189,13 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
 
         // if (cent_pt.y > 0.1f)
         // {
-            // continue;
+        // continue;
         // }
 
-        if (ci > ci_max || frame_index < 10)
-        {
-            ci_max = ci;
-
-            z(0) = cent_pt.x;
-            z(1) = cent_pt.y;
-            z(2) = cent_pt.z;
-            zs.push_back(z);
-
-            x_m(0) = cent_pt.x;
-            x_m(1) = cent_pt.y;
-            x_m(2) = cent_pt.z;
-            x_m(3) = 0.0f;
-            x_m(4) = 0.0f;
-            x_m(5) = 0.0f;
-            x_ms.push_back(x_m);
-            x_ps.push_back(x_m);
-
-            P_m << 0.1f * Eigen::MatrixXf::Identity(6, 6);
-            P_ms.push_back(P_m);
-            P_ps.push_back(P_p);
-        }
-        else
-        {
-            // kalman filter
-            // -------------
-            A << 1.0f, 0.0f, 0.0f, dt, 0.0f, 0.0f,
-                0.0f, 1.0f, 0.0f, 0.0f, dt, 0.0f,
-                0.0f, 0.0f, 1.0f, 0.0f, 0.0f, dt,
-                0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-                0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f;
-
-            u << 0.0f,
-                0.0f,
-                0.0f,
-                0.0f,
-                0.0f,
-                0.0f;
-
-            Q << 0.1f, 0.02f, 0.02f, 0.02f, 0.02f, 0.02f,
-                0.02f, 0.1f, 0.02f, 0.02f, 0.02f, 0.02f,
-                0.02f, 0.02f, 0.1f, 0.02f, 0.02f, 0.02f,
-                0.02f, 0.02f, 0.02f, 0.1f, 0.02f, 0.02f,
-                0.02f, 0.02f, 0.02f, 0.02f, 0.1f, 0.02f,
-                0.02f, 0.02f, 0.02f, 0.02f, 0.02f, 0.1f;
-
-            R << 0.5f, 0.0f, 0.0f,
-                0.0f, 0.5f, 0.0f,
-                0.0f, 0.0f, 0.5f;
-
-            H << 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f;
-
-            z << cent_pt.x,
-                cent_pt.y,
-                cent_pt.z;
-            zs[ci] = z;
-
-            x_p = x_ps[ci];
-            x_m = x_ms[ci];
-            P_p = P_ps[ci];
-            P_m = P_ms[ci];
-
-            // How to know Q, R, and H?
-            // Q keep ratio on Q but scale it down
-            // Q diags relate directly to state
-            // Q off diags relate one state to another
-            // H extracts only the direct measurements
-
-            // Prediction update
-            x_p = A * x_m + u;
-            P_p = A * P_m * A.transpose() + Q;
-            x_ps[ci] = x_p;
-            P_ps[ci] = P_p;
-
-            // Measurement update
-            P_m = (P_p.inverse() + H.transpose() * R.inverse() * H).inverse();
-            x_m = x_p + P_m * H.transpose() * R.inverse() * (z - H * x_p);
-            P_ms[ci] = P_m;
-            x_ms[ci] = x_m;
-            // -------------
-
-            std::cout << "Frame Index: " << frame_index << "\n"
-                      << "Cluster Index: " << ci << "\n"
-                      << "z:\n"
-                      << zs[ci] << "\n"
-                      << "x_m:\n"
-                      << x_ms[ci] << "\n\n";
-        }
+        z(0) = cent_pt.x;
+        z(1) = cent_pt.y;
+        z(2) = cent_pt.z;
+        zs.push_back(z);
 
         *cluster_sum += *cloud_cluster;
 
@@ -288,15 +203,59 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
         // std::cout << "Centroid of cluster: " << cent_pt << "\n"
         //   << std::endl;
 
+        // visualization_msgs::Marker kal_marker;
+        // kal_marker.pose.position.x = x_ms[i](0);
+        // kal_marker.pose.position.y = x_ms[i](1);
+        // kal_marker.pose.position.z = x_ms[i](2);
+        // kal_marker.type = visualization_msgs::Marker::SPHERE;
+        // kal_marker.header.stamp = ros::Time::now();
+        // kal_marker.header.frame_id = msg->header.frame_id;
+        // kal_marker.ns = "centroids";
+        // kal_marker.id = i + 100;
+        // kal_marker.action = visualization_msgs::Marker::ADD;
+        // kal_marker.scale.x = 0.02;
+        // kal_marker.scale.y = 0.02;
+        // kal_marker.scale.z = 0.02;
+        // kal_marker.color.r = 0.0f;
+        // kal_marker.color.g = 0.0f;
+        // kal_marker.color.b = 1.0f;
+        // kal_marker.color.a = 1.0f;
+        // kal_marker.lifetime = ros::Duration(0.75f);
+        // marker_pub.publish(kal_marker);
+
+        // dylan_msc::obj plot_obj;
+
+        // plot_obj.index = i;
+
+        // plot_obj.centroid.x = cent_pt.x;
+        // plot_obj.centroid.y = cent_pt.y;
+        // plot_obj.centroid.z = cent_pt.z;
+
+        // plot_obj.min.x = min_pt.x;
+        // plot_obj.min.y = min_pt.y;
+        // plot_obj.min.z = min_pt.z;
+
+        // plot_obj.max.x = max_pt.x;
+        // plot_obj.max.y = max_pt.y;
+        // plot_obj.max.z = max_pt.z;
+
+        // plotter_pub.publish(plot_obj);
+
+        num_clusters += 1;
+    }
+
+    // plot raw measurements
+    for (int i = 0; i < num_clusters; i++)
+    {
         visualization_msgs::Marker cent_marker;
-        cent_marker.pose.position.x = cent_pt.x;
-        cent_marker.pose.position.y = cent_pt.y;
-        cent_marker.pose.position.z = cent_pt.z;
+        cent_marker.pose.position.x = zs[i](0);
+        cent_marker.pose.position.y = zs[i](1);
+        cent_marker.pose.position.z = zs[i](2);
         cent_marker.type = visualization_msgs::Marker::SPHERE;
         cent_marker.header.stamp = ros::Time::now();
         cent_marker.header.frame_id = msg->header.frame_id;
         cent_marker.ns = "centroids";
-        cent_marker.id = ci;
+        cent_marker.id = i;
         cent_marker.action = visualization_msgs::Marker::ADD;
         cent_marker.scale.x = 0.05;
         cent_marker.scale.y = 0.05;
@@ -307,48 +266,247 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
         cent_marker.color.a = 0.25f;
         cent_marker.lifetime = ros::Duration(0.75f);
         marker_pub.publish(cent_marker);
-
-        visualization_msgs::Marker kal_marker;
-        kal_marker.pose.position.x = x_ms[ci](0);
-        kal_marker.pose.position.y = x_ms[ci](1);
-        kal_marker.pose.position.z = x_ms[ci](2);
-        kal_marker.type = visualization_msgs::Marker::SPHERE;
-        kal_marker.header.stamp = ros::Time::now();
-        kal_marker.header.frame_id = msg->header.frame_id;
-        kal_marker.ns = "centroids";
-        kal_marker.id = ci + 100;
-        kal_marker.action = visualization_msgs::Marker::ADD;
-        kal_marker.scale.x = 0.02;
-        kal_marker.scale.y = 0.02;
-        kal_marker.scale.z = 0.02;
-        kal_marker.color.r = 0.0f;
-        kal_marker.color.g = 0.0f;
-        kal_marker.color.b = 1.0f;
-        kal_marker.color.a = 1.0f;
-        kal_marker.lifetime = ros::Duration(0.75f);
-        marker_pub.publish(kal_marker);
-
-        dylan_msc::obj plot_obj;
-
-        plot_obj.index = ci;
-
-        plot_obj.centroid.x = cent_pt.x;
-        plot_obj.centroid.y = cent_pt.y;
-        plot_obj.centroid.z = cent_pt.z;
-
-        plot_obj.min.x = min_pt.x;
-        plot_obj.min.y = min_pt.y;
-        plot_obj.min.z = min_pt.z;
-
-        plot_obj.max.x = max_pt.x;
-        plot_obj.max.y = max_pt.y;
-        plot_obj.max.z = max_pt.z;
-
-        plotter_pub.publish(plot_obj);
-
-        ci += 1;
     }
+
+    // filtering stuff
+    if (frame_index < 10)
+    {
+        x_ms.clear();
+        x_ps.clear();
+        P_ms.clear();
+        P_ps.clear();
+        for (int i = 0; i < num_clusters; i++)
+        {
+            x_m(0) = zs[i](0);
+            x_m(1) = zs[i](1);
+            x_m(2) = zs[i](2);
+            // x_m(3) = 0.0f;
+            // x_m(4) = 0.0f;
+            // x_m(5) = 0.0f;
+            x_ms.push_back(x_m);
+            x_ps.push_back(x_m);
+
+            P_m << 0.1f * Eigen::MatrixXf::Identity(6, 6);
+            P_ms.push_back(P_m);
+            P_ps.push_back(P_m);
+        }
+    }
+    else
+    {
+        std::cout << "\nFrame: " << frame_index << "\n";
+
+        // this finds the order of the measurement vector z by smallest euclidean distance to x_m
+        // std::vector<int> i_m;        // vector of indices of matched zs to x_ms
+        // i_m.assign(x_ms.size(), -1); // match array is same size as number of estimates (x_ms)
+
+        // std::vector<float> min_dist;
+        zs_orig = zs;                                     // store raw measurements
+        Eigen::MatrixXf dists(num_clusters, x_ms.size()); // euc distance matrix (rows are measurements, cols are estimates)
+        for (int j = 0; j < x_ms.size(); j++)             // for jth x_m (estimate)
+        {
+            // min_dist.assign(x_ms.size(), 1000.0f);
+            for (int i = 0; i < num_clusters; i++) // for ith z (measurement)
+            {
+                float dist = (zs_orig[i] - x_ms[j]).norm(); // add H back here
+                dists(i, j) = dist;                         // euc distance between zs[i] and x_ms[j]
+
+                // if (dist < min_dist[j])
+                // {
+                //     min_dist[j] = dist;
+                //     // zs[j] = zs_orig[i]; // assign original z[i] with smallest distance to x_m[j] to z[j]
+                //     i_m[j] = i; // record index of matched z[i] in to i_m[j]
+                //     std::cout << dist << "\n"
+                //               << i << "\n"
+                //               << j << "\n";
+                // }
+            }
+        }
+
+        // find columnwise minimum of dists matrix
+        Eigen::MatrixXf min_dists(1, x_ms.size());           // vec of minimum distance to nearest meas for each est
+        Eigen::Matrix<int, -1, -1> min_inds(2, x_ms.size()); // mat of indices of nearest meas for each est
+        int i_min, j_min;
+        for (int j = 0; j < x_ms.size(); j++) // for each est
+        {
+            min_dists(j) = dists.col(j).minCoeff(&i_min, &j_min); // find min dist
+            min_inds(0, j) = i_min;                               // min dist ind i
+            min_inds(1, j) = j;                                   // min dist ind j
+        }
+
+        Eigen::Matrix<int, -1, -1> dup_inds(2, x_ms.size()); // indices of duplicate matches (ie. multiple estimates match to the same measurement)
+        // happens when removing an object from FOV
+
+        dup_inds.setConstant(-1);
+        for (int j = 0; j < x_ms.size(); j++) // for each est
+        {
+            for (int jj = j + 1; jj < x_ms.size(); jj++) // for each est except for previous est
+            {
+                if (min_inds(0, j) == min_inds(0, jj)) // if est has the same min inds (if it matches more than one meas)
+                {
+                    dup_inds(0, j) = min_inds(0, j); // set dup_inds to meas inds for that match
+                    dup_inds(0, jj) = min_inds(0, jj);
+                    dup_inds(1, j) = j; // set dup_inds to est inds for that match
+                    dup_inds(1, jj) = jj;
+                }
+            }
+        }
+
+        x_ms_orig = x_ms;                               // store original x_ms
+        Eigen::MatrixXf dup_dists(1, x_ms_orig.size()); // distances of duped matches
+        int i_max = -1, j_max = -1;
+        for (int j = 0; j < x_ms.size(); j++) // for each est
+        {
+            dup_dists.setConstant(-1.0f);
+            if (dup_inds(0, j) == -1 && dup_inds(1, j) == -1) // if that est was not duped
+            {
+                continue;
+            }
+            else // if it was a duped est (primarily)
+            {
+                for (int jj = j + 1; jj < x_ms_orig.size(); jj++) // for each est other than previous est
+                {
+                    if (dup_inds(0, jj) == dup_inds(0, j)) // find the other match dupes of the same meas
+                    {
+                        dup_dists(j) = min_dists(j); // set dup_dists to min dist on those matches
+                        dup_dists(jj) = min_dists(jj);
+                    }
+                }
+                // bool no_dup = 1; // var for checking if the meas was in fact duped
+                // for (int i = 0; i < dup_dists.size(); i++)
+                // {
+                // no_dup = no_dup && dup_dists(i) == -1.0f;
+                // }
+                // if (no_dup == false)
+                // {
+                float max_dup_dist = dup_dists.maxCoeff(&i_max, &j_max); // just getting j_max (est with largest euc distance)
+                x_ms.erase(x_ms.begin() + j_max);                        // pop the largest distance est
+                std::cout << dup_dists << "\n"
+                          << j_max << "\n";
+                // }
+            }
+        }
+
+        std::cout << dists << "\n\n"
+                  << min_dists << "\n"
+                  << min_inds << "\n\n"
+                  << dup_inds << "\n\n";
+
+        // if (num_clusters < x_ms.size()) // if we lose a cluster same as if (j[any] == j[any])
+        // {
+        //     for (int j = 0; j < x_ms.size(); j++)
+        //     {
+        //         for (int jj = 0; jj < x_ms.size(); jj++)
+        //         {
+        //             if (i_m[j] == i_m[jj])
+        //             {
+        //             }
+        //         }
+        //     }
+        // }
+
+        // std::vector<int> i_un; // vector of indices of UNmatched zs to x_ms
+        // for (int i = 0; i < num_clusters; i++)
+        // {
+        //     i_un.push_back(i); // create vector i_un = {0, 1, 2, 3, ...}
+        // }
+
+        // for (int j = 0; j < i_m.size(); j++) // for each matched index
+        // {
+        //     for (int i = 0; i < i_un.size(); i++) // for each cluster index (i_un.size() = num_clusters on first iteration)
+        //     {
+        //         if (i_un[i] == i_m[j]) // if an unmatched cluster index == an already matched cluster index
+        //         {
+        //             i_un.erase(i_un.begin() + i); // erase the unmatched cluster index from the unmatched indices vector
+        //         }
+        //         if (i >= i_un.size() - 1) // if the erased index was the last index in the vector
+        //         {
+        //             break;
+        //         }
+        //     }
+        // }
+
+        // // debug printing
+        // std::cout << "i_m\n";
+        // for (int i = 0; i < i_m.size(); i++)
+        // {
+        //     std::cout << i_m[i] << "\n";
+        // }
+
+        // std::cout << "i_un\n";
+        // for (int i = 0; i < i_un.size(); i++)
+        // {
+        //     std::cout << i_un[i] << "*****\n";
+        // }
+
+        // std::cout << "\n";
+
+        // reorder zs based on i_m and i_un
+
+        // for (int i = 0; i < i_un.size(); i++)
+        // {
+        // x_ms.push_back(zs_orig[i_un[i]]);
+        // }
+
+        // std::cout << "z: "
+        //           << "\n"
+        //           << zs[0]
+        //           << "\n"
+        //           << "x_m: "
+        //           << x_ms[0]
+        //           << "\n";
+
+        // --------------------------------------------
+
+        // kalman filter
+        // -------------
+
+        // x_p = x_ps[i];
+        // x_m = x_ms[i];
+        // P_p = P_ps[i];
+        // P_m = P_ms[i];
+
+        // // How to know Q, R, and H?
+        // // Q keep ratio on Q but scale it down
+        // // Q diags relate directly to state
+        // // Q off diags relate one state to another
+        // // H extracts only the direct measurements
+
+        // Prediction update
+        A << 1.0f, 0.0f, 0.0f, dt, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f, dt, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f, 0.0f, dt,
+            0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f;
+
+        // x_p = A * x_m + u;
+        // P_p = A * P_m * A.transpose() + Q;
+        // x_ps[i] = x_p;
+        // P_ps[i] = P_p;
+
+        // // Measurement update
+        // P_m = (P_p.inverse() + H.transpose() * R.inverse() * H).inverse();
+        // x_m = x_p + P_m * H.transpose() * R.inverse() * (z - H * x_p);
+        // P_ms[i] = P_m;
+        // x_ms[i] = x_m;
+        // // -------------
+
+        // std::cout << "Frame Index: " << frame_index << "\n"
+        //           << "Cluster Index: " << i << "\n"
+        //           << "z:\n"
+        //           << z << "\n"
+        //           << "x_m:\n"
+        //           << x_m << "\n"
+        //           << "P_m:\n"
+        //           << P_m << "\n";
+
+        //fake kalman filter for debug
+        x_ms = zs;
+    }
+    // --------------------------------------------
+
     t0 = t1;
+    last_num_clusters = num_clusters;
     sensor_msgs::PointCloud2 output;
     pcl::toROSMsg(*cluster_sum, output);
     output.header = msg->header;
@@ -358,6 +516,29 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
 
 int main(int argc, char **argv)
 {
+    // static matrices
+    u << 0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f;
+
+    Q << 0.025f, 0.05f, 0.05f, 0.05f, 0.05f, 0.05f,
+        0.05f, 0.025f, 0.05f, 0.05f, 0.05f, 0.05f,
+        0.05f, 0.05f, 0.025f, 0.05f, 0.05f, 0.05f,
+        0.05f, 0.05f, 0.05f, 0.1f, 0.05f, 0.05f,
+        0.05f, 0.05f, 0.05f, 0.05f, 0.1f, 0.05f,
+        0.05f, 0.05f, 0.05f, 0.05f, 0.05f, 0.1f;
+
+    R << 0.5f, 0.0f, 0.0f,
+        0.0f, 0.5f, 0.0f,
+        0.0f, 0.0f, 0.5f;
+
+    H << 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f;
+
     ros::init(argc, argv, "imageProc1");
     ros::NodeHandle node;
 
