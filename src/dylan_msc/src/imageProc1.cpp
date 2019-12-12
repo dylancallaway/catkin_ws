@@ -366,6 +366,15 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
             // Prediction update
             x_p = A * x_m + u;
             P_p = A * P_m * A.transpose() + Q;
+            // TODO use x_p for euc distance filter
+            // look into noise matrix
+            // look into diagonals on covariance matrix (maybe determinant)
+            // look into x_p leaving FOV
+            
+            // drop x_ps that are predicted to leave FOV
+
+            // turtlebot pwd: nvidia
+            // laptop pwd: nsfnri
 
             // Measurement update
             P_m = (P_p.inverse() + H.transpose() * R.inverse() * H).inverse();
