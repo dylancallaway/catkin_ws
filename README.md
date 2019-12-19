@@ -37,3 +37,12 @@ run: rviz
 Open a new terminal window
 
 run: roslaunch dylan_msc main.launch
+
+In rviz:
+
+Change fixed frame in global options from map to camera link
+
+Click add -> camera.
+add -> pointcloud2
+add -> pointcloud2
+add -> marker
