@@ -3,6 +3,9 @@ project(dylan_msc)
 
 add_compile_options(-std=c++11)
 
+# FOLLOWING LINE ADDED FOR USE WITH TURTLEBOT
+set(PCL_DIR "/usr/lib/aarch64-linux-gnu/cmake/pcl")
+
 find_package(catkin REQUIRED COMPONENTS 
     roscpp 
     rospy 

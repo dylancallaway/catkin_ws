@@ -247,179 +247,179 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
         cent_marker.color.r = 0.0f;
         cent_marker.color.g = 1.0f;
         cent_marker.color.b = 0.0f;
-        cent_marker.color.a = 0.25f;
+        cent_marker.color.a = 1.0f;
         cent_marker.lifetime = ros::Duration(0.75f);
         marker_pub.publish(cent_marker);
     }
 
     // filtering stuff
-    if (frame_index < 10)
-    {
-        x_ms.clear();
-        x_ps.clear();
-        P_ms.clear();
-        P_ps.clear();
-        for (int i = 0; i < num_clusters; i++)
-        {
-            x_m(0) = zs[i](0);
-            x_m(1) = zs[i](1);
-            x_m(2) = zs[i](2);
-            // x_m(3) = 0.0f;
-            // x_m(4) = 0.0f;
-            // x_m(5) = 0.0f;
-            x_ms.push_back(x_m);
-            x_ps.push_back(x_m);
+    // if (frame_index < 10)
+    // {
+    //     x_ms.clear();
+    //     x_ps.clear();
+    //     P_ms.clear();
+    //     P_ps.clear();
+    //     for (int i = 0; i < num_clusters; i++)
+    //     {
+    //         x_m(0) = zs[i](0);
+    //         x_m(1) = zs[i](1);
+    //         x_m(2) = zs[i](2);
+    //         // x_m(3) = 0.0f;
+    //         // x_m(4) = 0.0f;
+    //         // x_m(5) = 0.0f;
+    //         x_ms.push_back(x_m);
+    //         x_ps.push_back(x_m);
 
-            P_m << 0.1f * Eigen::MatrixXf::Identity(6, 6);
-            P_ms.push_back(P_m);
-            P_ps.push_back(P_m);
-        }
-    }
-    else
-    {
-        std::cout << "\nFrame: " << frame_index << "\n";
+    //         P_m << 0.1f * Eigen::MatrixXf::Identity(6, 6);
+    //         P_ms.push_back(P_m);
+    //         P_ps.push_back(P_m);
+    //     }
+    // }
+    // else
+    // {
+    //     std::cout << "\nFrame: " << frame_index << "\n";
 
-        zs_orig = zs; // store raw measurements
-        x_ms_orig = x_ms;
+    //     zs_orig = zs; // store raw measurements
+    //     x_ms_orig = x_ms;
 
-        int m = zs.size(); // get matrix size
-        int n = x_ms.size();
+    //     int m = zs.size(); // get matrix size
+    //     int n = x_ms.size();
 
-        // Generate e matrix
-        Eigen::ArrayXXf e(m, n);    // euc distance matrix (rows are measurements, cols are estimates)
-        for (int i = 0; i < m; i++) // for ith z (measurement)
-        {
-            for (int j = 0; j < n; j++) // for jth x_m (estimate)
-            {
-                e(i, j) = (zs_orig[i] - x_ms[j]).norm(); // TODO add H back here // euc distance between zs[i] and x_ms[j]
-            }
-        }
+    //     // Generate e matrix
+    //     Eigen::ArrayXXf e(m, n);    // euc distance matrix (rows are measurements, cols are estimates)
+    //     for (int i = 0; i < m; i++) // for ith z (measurement)
+    //     {
+    //         for (int j = 0; j < n; j++) // for jth x_m (estimate)
+    //         {
+    //             e(i, j) = (zs_orig[i] - x_ms[j]).norm(); // TODO add H back here // euc distance between zs[i] and x_ms[j]
+    //         }
+    //     }
 
-        std::cout << "e:\n"
-                  << e << "\n\n";
+    //     std::cout << "e:\n"
+    //               << e << "\n\n";
 
-        if (m == n) // if no objects are added/removed
-        {
-            // colwise min
-            Eigen::MatrixXf col_mins(1, n);
-            col_mins = e.colwise().minCoeff();
+    //     if (m == n) // if no objects are added/removed
+    //     {
+    //         // colwise min
+    //         Eigen::MatrixXf col_mins(1, n);
+    //         col_mins = e.colwise().minCoeff();
 
-            std::cout << "Col Mins: " << col_mins << "\n\n";
+    //         std::cout << "Col Mins: " << col_mins << "\n\n";
 
-            // subtract mins from e
-            Eigen::ArrayXXf e_star(m, n);
-            for (int j = 0; j < n; j++) // for jth x_m (estimate)
-            {
-                e_star.col(j) = e.col(j) - col_mins(j);
-            }
+    //         // subtract mins from e
+    //         Eigen::ArrayXXf e_star(m, n);
+    //         for (int j = 0; j < n; j++) // for jth x_m (estimate)
+    //         {
+    //             e_star.col(j) = e.col(j) - col_mins(j);
+    //         }
 
-            std::cout << "e*:\n"
-                      << e_star << "\n\n";
+    //         std::cout << "e*:\n"
+    //                   << e_star << "\n\n";
 
-            // find zero indices
-            int num_zeros = 0;
-            Eigen::Array<bool, -1, -1> find_zeros = e_star == 0.0f;
-            Eigen::Array<int, -1, -1> zero_inds_temp(m * n, 2);
-            zero_inds_temp.setConstant(-1);
-            for (int i = 0; i < m; i++) // for ith z (measurement)
-            {
-                for (int j = 0; j < n; j++) // for jth x_m (estimate)
-                {
-                    if (find_zeros(i, j) == 1)
-                    {
-                        zero_inds_temp(num_zeros, 0) = i;
-                        zero_inds_temp(num_zeros, 1) = j;
-                        num_zeros += 1;
-                    }
-                }
-            }
-            Eigen::Array<int, -1, -1> zero_inds = zero_inds_temp.topRows(num_zeros);
+    //         // find zero indices
+    //         int num_zeros = 0;
+    //         Eigen::Array<bool, -1, -1> find_zeros = e_star == 0.0f;
+    //         Eigen::Array<int, -1, -1> zero_inds_temp(m * n, 2);
+    //         zero_inds_temp.setConstant(-1);
+    //         for (int i = 0; i < m; i++) // for ith z (measurement)
+    //         {
+    //             for (int j = 0; j < n; j++) // for jth x_m (estimate)
+    //             {
+    //                 if (find_zeros(i, j) == 1)
+    //                 {
+    //                     zero_inds_temp(num_zeros, 0) = i;
+    //                     zero_inds_temp(num_zeros, 1) = j;
+    //                     num_zeros += 1;
+    //                 }
+    //             }
+    //         }
+    //         Eigen::Array<int, -1, -1> zero_inds = zero_inds_temp.topRows(num_zeros);
 
-            std::cout << "Zero Inds:\n"
-                      << zero_inds << "\n\n";
+    //         std::cout << "Zero Inds:\n"
+    //                   << zero_inds << "\n\n";
 
-            // set est to meas it is closest to
-            for (int j = 0; j < n; j++) // for jth x_m (estimate)
-            {
-                int i_star = zero_inds(j, 0);
-                int j_star = zero_inds(j, 1);
-                x_ms[i_star] = x_ms_orig[j_star];
-            }
-        }
-        // kalman filter
-        // -------------
-        A << 1.0f, 0.0f, 0.0f, dt, 0.0f, 0.0f,
-            0.0f, 1.0f, 0.0f, 0.0f, dt, 0.0f,
-            0.0f, 0.0f, 1.0f, 0.0f, 0.0f, dt,
-            0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-            0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-            0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f;
+    //         // set est to meas it is closest to
+    //         for (int j = 0; j < n; j++) // for jth x_m (estimate)
+    //         {
+    //             int i_star = zero_inds(j, 0);
+    //             int j_star = zero_inds(j, 1);
+    //             x_ms[i_star] = x_ms_orig[j_star];
+    //         }
+    //     }
+    //     // kalman filter
+    //     // -------------
+    //     A << 1.0f, 0.0f, 0.0f, dt, 0.0f, 0.0f,
+    //         0.0f, 1.0f, 0.0f, 0.0f, dt, 0.0f,
+    //         0.0f, 0.0f, 1.0f, 0.0f, 0.0f, dt,
+    //         0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+    //         0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+    //         0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f;
 
-        for (int j = 0; j < n; j++) // for jth x_m (estimate)
-        {
-            x_p = x_ps[j];
-            x_m = x_ms[j];
-            P_p = P_ps[j];
-            P_m = P_ms[j];
-            z = zs[j];
+    //     for (int j = 0; j < n; j++) // for jth x_m (estimate)
+    //     {
+    //         x_p = x_ps[j];
+    //         x_m = x_ms[j];
+    //         P_p = P_ps[j];
+    //         P_m = P_ms[j];
+    //         z = zs[j];
 
-            // Prediction update
-            x_p = A * x_m + u;
-            P_p = A * P_m * A.transpose() + Q;
-            // TODO use x_p for euc distance filter
-            // look into noise matrix
-            // look into diagonals on covariance matrix (maybe determinant)
-            // look into x_p leaving FOV
+    //         // Prediction update
+    //         x_p = A * x_m + u;
+    //         P_p = A * P_m * A.transpose() + Q;
+    //         // TODO use x_p for euc distance filter
+    //         // look into noise matrix
+    //         // look into diagonals on covariance matrix (maybe determinant)
+    //         // look into x_p leaving FOV
             
-            // drop x_ps that are predicted to leave FOV
+    //         // drop x_ps that are predicted to leave FOV
 
-            // turtlebot pwd: nvidia
-            // laptop pwd: nsfnri
+    //         // turtlebot pwd: nvidia
+    //         // laptop pwd: nsfnri
 
-            // Measurement update
-            P_m = (P_p.inverse() + H.transpose() * R.inverse() * H).inverse();
-            x_m = x_p + P_m * H.transpose() * R.inverse() * (z - H * x_p);
+    //         // Measurement update
+    //         P_m = (P_p.inverse() + H.transpose() * R.inverse() * H).inverse();
+    //         x_m = x_p + P_m * H.transpose() * R.inverse() * (z - H * x_p);
 
-            x_ps[j] = x_p;
-            P_ps[j] = P_p;
-            P_ms[j] = P_m;
-            x_ms[j] = x_m;
-            // -------------
+    //         x_ps[j] = x_p;
+    //         P_ps[j] = P_p;
+    //         P_ms[j] = P_m;
+    //         x_ms[j] = x_m;
+    //         // -------------
 
-            // std::cout << "Frame Index: " << frame_index << "\n"
-            //           << "Cluster Index: " << i << "\n"
-            //           << "z:\n"
-            //           << z << "\n"
-            //           << "x_m:\n"
-            //           << x_m << "\n"
-            //           << "P_m:\n"
-            //           << P_m << "\n";
-        }
+    //         // std::cout << "Frame Index: " << frame_index << "\n"
+    //         //           << "Cluster Index: " << i << "\n"
+    //         //           << "z:\n"
+    //         //           << z << "\n"
+    //         //           << "x_m:\n"
+    //         //           << x_m << "\n"
+    //         //           << "P_m:\n"
+    //         //           << P_m << "\n";
+    //     }
 
-        // kalman marker plotting
-        for (int j = 0; j < n; j++) // for jth x_m (estimate)
-        {
-            visualization_msgs::Marker kal_marker;
-            kal_marker.pose.position.x = x_ms[j](0);
-            kal_marker.pose.position.y = x_ms[j](1);
-            kal_marker.pose.position.z = x_ms[j](2);
-            kal_marker.type = visualization_msgs::Marker::SPHERE;
-            kal_marker.header.stamp = ros::Time::now();
-            kal_marker.header.frame_id = msg->header.frame_id;
-            kal_marker.ns = "centroids";
-            kal_marker.id = j + 100;
-            kal_marker.action = visualization_msgs::Marker::ADD;
-            kal_marker.scale.x = 0.02;
-            kal_marker.scale.y = 0.02;
-            kal_marker.scale.z = 0.02;
-            kal_marker.color.r = 0.0f;
-            kal_marker.color.g = 0.0f;
-            kal_marker.color.b = 1.0f;
-            kal_marker.color.a = 1.0f;
-            kal_marker.lifetime = ros::Duration(0.75f);
-            marker_pub.publish(kal_marker);
-        }
-    }
+    //     // kalman marker plotting
+    //     for (int j = 0; j < n; j++) // for jth x_m (estimate)
+    //     {
+    //         visualization_msgs::Marker kal_marker;
+    //         kal_marker.pose.position.x = x_ms[j](0);
+    //         kal_marker.pose.position.y = x_ms[j](1);
+    //         kal_marker.pose.position.z = x_ms[j](2);
+    //         kal_marker.type = visualization_msgs::Marker::SPHERE;
+    //         kal_marker.header.stamp = ros::Time::now();
+    //         kal_marker.header.frame_id = msg->header.frame_id;
+    //         kal_marker.ns = "centroids";
+    //         kal_marker.id = j + 100;
+    //         kal_marker.action = visualization_msgs::Marker::ADD;
+    //         kal_marker.scale.x = 0.02;
+    //         kal_marker.scale.y = 0.02;
+    //         kal_marker.scale.z = 0.02;
+    //         kal_marker.color.r = 0.0f;
+    //         kal_marker.color.g = 0.0f;
+    //         kal_marker.color.b = 1.0f;
+    //         kal_marker.color.a = 1.0f;
+    //         kal_marker.lifetime = ros::Duration(0.75f);
+    //         marker_pub.publish(kal_marker);
+    //     }
+    // }
     // --------------------------------------------
 
     t0 = t1;
@@ -429,7 +429,7 @@ void frame_cb(const sensor_msgs::PointCloud2::ConstPtr &msg)
     output.header = msg->header;
     pcl_pub.publish(output);
     frame_index += 1;
-    std::cout << "\n";
+    // std::cout << "\n";
 }
 
 int main(int argc, char **argv)
