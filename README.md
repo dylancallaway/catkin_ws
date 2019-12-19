@@ -23,3 +23,17 @@ Centroids are published to: /mark2 (msg type: visualization_msgs/Marker)
 Centroid + bounding box information is published to: /plot2 (msg type: dylan_msc/obj.h)
 
 Note: frame of published data is not global frame.
+
+To run: 
+
+Open a terminal window
+
+run: roscore
+
+Open a new terminal window
+
+run: rviz
+
+Open a new terminal window
+
+run: roslaunch dylan_msc main.launch
