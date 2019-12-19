@@ -6,10 +6,20 @@ for C++: #include <dylan_msc/obj.h>
 
 for Python: from dylan_msc.msg import obj
 
-Segmented point cloud data is published to: /points2
+dylan_msc/obj has 4 fields:
 
-Centroids are published to: /mark2
+uint32 index (frame index)
 
-Centroid + bounding box information is published to: /plot2
+geometry_msgs/Point centroid (centroid of segmented cluster)
+
+geometry_msgs/Point min (smallest x, y, z values)
+
+geometry_msgs/Point max (largest x, y, z values)
+
+Segmented point cloud data is published to: /points2 (msg type: sensor_msgs/PointCloud2)
+
+Centroids are published to: /mark2 (msg type: visualization_msgs/Marker)
+
+Centroid + bounding box information is published to: /plot2 (msg type: dylan_msc/obj.h)
 
 Note: frame of published data is not global frame.
